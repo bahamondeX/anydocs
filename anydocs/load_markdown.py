@@ -7,6 +7,7 @@ import typing_extensions as tpe
 
 from ._base import Artifact
 
+
 @dataclass
 class MarkdownLoader(Artifact):
     ref: tpe.Annotated[

@@ -15,10 +15,12 @@ from typing_extensions import ParamSpec
 T = TypeVar("T")
 P = ParamSpec("P")
 
+
 @dataclass
 class HTTPException(BaseException):
-    detail:str
+    detail: str
     status_code: int = field(default=500)
+
 
 def get_key(*, object: dict[str, T], key: str) -> T | None:
     try:
@@ -27,7 +29,7 @@ def get_key(*, object: dict[str, T], key: str) -> T | None:
         return None
 
 
-def chunker(seq: str, size: int=1000):
+def chunker(seq: str, size: int = 1000):
     return (seq[pos : pos + size] for pos in range(0, len(seq), size))
 
 
@@ -300,3 +302,22 @@ def merge_dicts(*dicts: dict[str, T]) -> dict[str, T]:
     Merges multiple dictionaries into one.
     """
     return {k: v for d in dicts for k, v in d.items()}
+
+def _new_event_loop():
+    loop = asyncio.get_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop
+def get_loop():
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            return loop
+        else:
+            loop.close()
+        return _new_event_loop()    
+    except RuntimeError as e:
+        logger.error("Event loop wasn't running %s", e)
+        return _new_event_loop()
+    except Exception as e:
+        logger.error("Unexpected error %s", e)
+        raise e

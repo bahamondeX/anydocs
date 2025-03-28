@@ -51,7 +51,7 @@ class PptxLoader(Artifact):
                     for paragraph in text_frame.paragraphs:
                         for run in paragraph.runs:
                             if run.text:
-                                part+=run.text
+                                part += run.text
                     yield f"<p>{part}</p>"
                 if shape.shape_type == 13:  # Picture type
                     image = shape.image

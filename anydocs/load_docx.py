@@ -10,17 +10,18 @@ from ._base import Artifact
 @dataclass
 class DocxLoader(Artifact):
     ref: tpe.Annotated[
-		str,
-		tpe.Doc(
-			"""
+        str,
+        tpe.Doc(
+            """
 	This `ref` can represent one out of three things:
 
 	- An HTTP URL.
 	- A file path (temporary or not) within the local filesystem.
 	- A text file content.
 	"""
-		),
-	]
+        ),
+    ]
+
     def extract(self):
         # Retrieve the file path
         file_path = self.retrieve().as_posix()

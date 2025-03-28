@@ -8,17 +8,17 @@ import typing_extensions as tpe
 @dataclass
 class PdfLoader(Artifact):
     ref: tpe.Annotated[
-		str,
-		tpe.Doc(
-			"""
+        str,
+        tpe.Doc(
+            """
 	This `ref` can represent one out of three things:
 
 	- An HTTP URL.
 	- A file path (temporary or not) within the local filesystem.
 	- A text file content.
 	"""
-		),
-	]
+        ),
+    ]
 
     def extract(self):
         doc = open_pdf(self.retrieve())

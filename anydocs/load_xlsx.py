@@ -39,6 +39,7 @@ class ExcelLoader(Artifact):
 	"""
         ),
     ]
+
     def extract(self):
         wb = load_workbook(filename=self.ref, data_only=True)
         for sheet_name in wb.sheetnames:
@@ -46,5 +47,9 @@ class ExcelLoader(Artifact):
             for row in sheet.iter_rows():
                 for cell in row:
                     if cell.value:
-                        data_dict = {"sheet":sheet_name,"pos":f"{cell.column}{cell.row}","value":cell.value}
+                        data_dict = {
+                            "sheet": sheet_name,
+                            "pos": f"{cell.column}{cell.row}",
+                            "value": cell.value,
+                        }
                         yield json.dumps(data_dict, cls=JsonEncoder)
