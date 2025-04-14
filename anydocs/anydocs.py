@@ -358,7 +358,7 @@ class AnyDocs:
 # Convenience function that uses the new AnyDocs class
 def load_document(
     file: tp.Union[str, Path, UploadFile], 
-    extract_text_only: bool = False
+    extract_text_only: bool = True
 ) -> tp.Generator[str, None, None]:
     """
     Load a document from a source (URL, file path, or content) and extract its content.
