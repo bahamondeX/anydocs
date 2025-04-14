@@ -1,10 +1,9 @@
+import base64
 import typing as tp
 from dataclasses import dataclass
-import base64
-import httpx
-from pptx import Presentation
+
 import typing_extensions as tpe
-import tempfile
+from pptx import Presentation
 
 from ._base import Artifact
 
@@ -25,34 +24,63 @@ class PptxLoader(Artifact):
     ]
 
     def extract(self) -> tp.Generator[str, None, None]:
-        # Check if the ref is a URL
-        if self.ref.startswith("http"):
-            # Download the file
-            response = httpx.get(self.ref)
-            response.raise_for_status()  # Check if the request was successful
-
-            # Save the file to a temporary location
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp_file:
-                tmp_file.write(response.content)
-                tmp_file_path = tmp_file.name
-
-            # Load the presentation from the temporary file
-            prs = Presentation(tmp_file_path)
-        else:
-            # Assume it's a local file path
-            prs = Presentation(self.ref)
-
-        # Extract text and images from the presentation
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                part = ""
-                if shape.has_text_frame:
-                    text_frame = shape.text_frame
-                    for paragraph in text_frame.paragraphs:
-                        for run in paragraph.runs:
-                            if run.text:
-                                part += run.text
-                    yield f"<p>{part}</p>"
-                if shape.shape_type == 13:  # Picture type
-                    image = shape.image
-                    yield f"<img style='width: 24em;' src='data:image/png;base64,{base64.b64encode(image.blob).decode()}' />"
+        """
+        Extract text and images from PowerPoint presentations.
+        
+        Yields:
+            Text content and image data as HTML
+        """
+        file_path = self.retrieve()
+        
+        try:
+            # Load the presentation
+            prs = Presentation(file_path.as_posix())
+            
+            # Extract content from each slide
+            for slide_index, slide in enumerate(prs.slides):
+                # Mark the slide number
+                yield f"<h2>Slide {slide_index + 1}</h2>"
+                
+                # Process each shape in the slide
+                for shape in slide.shapes:
+                    # Extract text from text frames
+                    if shape.has_text_frame:
+                        text_frame = shape.text_frame
+                        if text_frame.text:
+                            # Build paragraph HTML
+                            parts = []
+                            for paragraph in text_frame.paragraphs:
+                                if paragraph.text:
+                                    parts.append(f"<p>{paragraph.text}</p>")
+                            if parts:
+                                yield "\n".join(parts)
+                    
+                    # Extract images (shape type 13 is a picture)
+                    if hasattr(shape, "shape_type") and shape.shape_type == 13:
+                        try:
+                            image = shape.image
+                            image_data = base64.b64encode(image.blob).decode()
+                            yield f'<img style="width: 24em;" src="data:image/png;base64,{image_data}" />'
+                        except Exception as img_error:
+                            yield f"<p>Error extracting image: {str(img_error)}</p>"
+                    
+                    # Handle tables
+                    if hasattr(shape, "has_table") and shape.has_table:
+                        try:
+                            table_html = ["<table border='1' style='border-collapse: collapse;'>"]
+                            for row in shape.table.rows:
+                                table_html.append("<tr>")
+                                for cell in row.cells:
+                                    if cell.text:
+                                        table_html.append(f"<td>{cell.text}</td>")
+                                    else:
+                                        table_html.append("<td></td>")
+                                table_html.append("</tr>")
+                            table_html.append("</table>")
+                            yield "\n".join(table_html)
+                        except Exception as table_error:
+                            yield f"<p>Error extracting table: {str(table_error)}</p>"
+        
+        except Exception as e:
+            # Handle errors gracefully
+            yield f"Error processing PowerPoint file: {str(e)}"

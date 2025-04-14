@@ -1,21 +1,27 @@
 import mimetypes
+import importlib
+import inspect
 import typing as tp
 from pathlib import Path
 
+from bs4 import BeautifulSoup, Comment
+
+# Import the FileType enum from the existing code
+from ._base import FileType, UploadFile, Artifact
 from .load_docx import DocxLoader
 from .load_jsonl import JsonLoader
 from .load_markdown import MarkdownLoader
 from .load_pdf import PdfLoader
 from .load_pptx import PptxLoader
 from .load_xlsx import ExcelLoader
-
-# Import the FileType enum from the existing code
-from ._base import FileType, UploadFile
+from .load_html import HTMLLoader
+from .load_csv import CSVLoader
+from .load_xml import XMLLoader
+from .load_rtf import RTFLoader
 
 
 class DocumentLoaderError(Exception):
     """Custom exception for document loading errors."""
-
     pass
 
 
@@ -27,7 +33,33 @@ class AnyDocs:
     - Local file paths
     - URLs
     - HTTP responses
+    
+    Provides:
+    - Registry for document loaders
+    - Dynamic loader registration
+    - Text extraction for LLM context windows
     """
+
+    # Registry for file extensions and their corresponding loaders
+    _registry: tp.ClassVar[dict[str, tp.Type[Artifact]]] = {
+        FileType.DOCX.value: DocxLoader,
+        FileType.DOC.value: DocxLoader,
+        FileType.PDF.value: PdfLoader,
+        FileType.PPTX.value: PptxLoader,
+        FileType.PPT.value: PptxLoader,
+        FileType.XLSX.value: ExcelLoader,
+        FileType.XLS.value: ExcelLoader,
+        FileType.JSON.value: JsonLoader,
+        FileType.MD.value: MarkdownLoader,
+        FileType.TXT.value: MarkdownLoader,
+        FileType.HTML.value: HTMLLoader,
+        FileType.HTM.value: HTMLLoader,
+        FileType.CSS.value: MarkdownLoader,
+        FileType.JS.value: MarkdownLoader,
+        FileType.XML.value: XMLLoader,
+        FileType.CSV.value: CSVLoader,
+        FileType.RTF.value: RTFLoader,
+    }
 
     @classmethod
     def _guess_file_type_from_mimetype(cls, mimetype: str) -> tp.Optional[str]:
@@ -42,19 +74,19 @@ class AnyDocs:
         """
         mimetype = mimetype.lower()
         mimetype_to_suffix = {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": FileType.DOCX,
-            "application/msword": FileType.DOC,
-            "application/pdf": FileType.PDF,
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation": FileType.PPTX,
-            "application/vnd.ms-powerpoint": FileType.PPT,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": FileType.XLSX,
-            "application/vnd.ms-excel": FileType.XLS,
-            "application/json": FileType.JSON,
-            "text/markdown": FileType.MD,
-            "text/plain": FileType.TXT,
-            "text/html": FileType.HTML,
-            "text/css": FileType.CSS,
-            "application/javascript": FileType.JS,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": FileType.DOCX.value,
+            "application/msword": FileType.DOC.value,
+            "application/pdf": FileType.PDF.value,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": FileType.PPTX.value,
+            "application/vnd.ms-powerpoint": FileType.PPT.value,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": FileType.XLSX.value,
+            "application/vnd.ms-excel": FileType.XLS.value,
+            "application/json": FileType.JSON.value,
+            "text/markdown": FileType.MD.value,
+            "text/plain": FileType.TXT.value,
+            "text/html": FileType.HTML.value,
+            "text/css": FileType.CSS.value,
+            "application/javascript": FileType.JS.value,
         }
 
         return mimetype_to_suffix.get(mimetype)
@@ -78,20 +110,22 @@ class AnyDocs:
             # Normalize the suffix to match FileType
             suffix = file_path.suffix.lower()
             normalized_suffixes = {
-                ".doc": FileType.DOCX,
-                ".docx": FileType.DOCX,
-                ".pdf": FileType.PDF,
-                ".ppt": FileType.PPTX,
-                ".pptx": FileType.PPTX,
-                ".xls": FileType.XLSX,
-                ".xlsx": FileType.XLSX,
-                ".json": FileType.JSON,
-                ".jsonl": FileType.JSON,
-                ".md": FileType.MD,
-                ".txt": FileType.TXT,
-                ".html": FileType.HTML,
-                ".css": FileType.CSS,
-                ".js": FileType.JS,
+                ".doc": FileType.DOCX.value,
+                ".docx": FileType.DOCX.value,
+                ".pdf": FileType.PDF.value,
+                ".ppt": FileType.PPTX.value,
+                ".pptx": FileType.PPTX.value,
+                ".xls": FileType.XLSX.value,
+                ".xlsx": FileType.XLSX.value,
+                ".xlsb": FileType.XLSX.value,
+                ".json": FileType.JSON.value,
+                ".jsonl": FileType.JSON.value,
+                ".md": FileType.MD.value,
+                ".txt": FileType.TXT.value,
+                ".html": FileType.HTML.value,
+                ".htm": FileType.HTML.value,
+                ".css": FileType.CSS.value,
+                ".js": FileType.JS.value,
             }
             if suffix in normalized_suffixes:
                 return normalized_suffixes[suffix]
@@ -111,34 +145,147 @@ class AnyDocs:
 
                 # PDF magic number
                 if header.startswith(b"%PDF-"):
-                    return FileType.PDF
+                    return FileType.PDF.value
 
                 # DOCX magic number
                 if header.startswith(b"PK\x03\x04") and b"word/" in header:
-                    return FileType.DOCX
+                    return FileType.DOCX.value
 
                 # XLSX magic number
                 if header.startswith(b"PK\x03\x04") and b"xl/" in header:
-                    return FileType.XLSX
+                    return FileType.XLSX.value
 
                 # PPTX magic number
                 if header.startswith(b"PK\x03\x04") and b"ppt/" in header:
-                    return FileType.PPTX
+                    return FileType.PPTX.value
         except Exception:
-            return FileType.PDF
+            pass
 
         # If all methods fail
         raise DocumentLoaderError(f"Could not determine file type for {file_path}")
 
     @classmethod
-    def load(
-        cls, file: tp.Union[str, Path, UploadFile]
-    ) -> tp.Generator[str, None, None]:
+    def register_loader(cls, extension: str, loader_class: tp.Type[Artifact]) -> None:
+        """
+        Register a new document loader for a specific file extension.
+        
+        Args:
+            extension: The file extension to register (including the dot)
+            loader_class: The loader class (must inherit from Artifact)
+        
+        Raises:
+            TypeError: If the loader class doesn't inherit from Artifact
+            ValueError: If the extension is invalid
+        """
+        # Validate loader class
+        if not inspect.isclass(loader_class):
+            raise TypeError(f"Loader class must inherit from Artifact base class")
+        
+        # Validate extension
+        if not extension.startswith('.'):
+            extension = f".{extension}"
+            
+        extension = extension.lower()
+        
+        # Register the loader
+        cls._registry[extension] = loader_class
+
+    @classmethod
+    def from_module(cls, module_name: str) -> None:
+        """
+        Dynamically load loaders from a module and register them.
+        
+        Args:
+            module_name: The name of the module to import
+            
+        Raises:
+            ImportError: If the module cannot be imported or has no loaders
+        """
+        try:
+            module = importlib.import_module(module_name)
+            
+            # Find all classes that inherit from Artifact
+            loaders_found = False
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                if issubclass(obj, Artifact) and obj != Artifact:
+                    # Try to determine the file extension from the class name
+                    extension = None
+                    
+                    if name.endswith('Loader'):
+                        # Remove 'Loader' suffix and convert to extension
+                        ext_part = name[:-6].lower()
+                        
+                        # Handle special cases
+                        if ext_part == 'html':
+                            extension = '.html'
+                        elif ext_part == 'docx':
+                            extension = '.docx'
+                        elif ext_part == 'pdf':
+                            extension = '.pdf'
+                        elif ext_part == 'pptx':
+                            extension = '.pptx'
+                        elif ext_part == 'excel':
+                            extension = '.xlsx'
+                        elif ext_part == 'json':
+                            extension = '.json'
+                        elif ext_part == 'markdown':
+                            extension = '.md'
+                        elif ext_part == 'jsonl':
+                            extension = '.jsonl'
+                        if extension:
+                            cls.register_loader(extension, obj)
+                            loaders_found = True
+            
+            if not loaders_found:
+                raise ImportError(f"No valid loader classes found in module {module_name}")
+                            
+        except (ImportError, AttributeError) as e:
+            raise ImportError(f"Could not import loaders from module {module_name}: {str(e)}")
+
+    @classmethod
+    def _extract_text_only(cls, html_content: str) -> str:
+        """
+        Extract plain text from HTML content, removing all tags and scripts.
+        
+        Args:
+            html_content: HTML content as string
+            
+        Returns:
+            Plain text suitable for LLM context window
+        """
+        try:
+            # Parse HTML content
+            soup = BeautifulSoup(html_content, 'lxml')
+            
+            # Remove scripts, styles, and comments
+            for element in soup(['script', 'style', 'head', 'title', 'meta', '[document]']):
+                element.extract()
+                
+            # Remove comments
+            for comment in soup.find_all(text=lambda text: isinstance(text, Comment)):
+                comment.extract()
+            
+            # Get text with sensible spacing
+            text = soup.get_text(separator=' ', strip=True)
+            
+            # Clean up whitespace
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            return text
+        except Exception:
+            # If parsing fails, return original content
+            return html_content
+
+    @classmethod
+    def load_document(cls, file: tp.Union[str, Path, UploadFile], extract_text_only: bool = True) -> tp.Generator[str, None, None]:
         """
         Load and extract text from a document based on its type.
 
         Args:
             file: A file path, URL, or UploadFile object
+            extract_text_only: If True, extracts only plain text without HTML formatting
 
         Returns:
             A generator yielding text chunks from the document
@@ -150,56 +297,80 @@ class AnyDocs:
         if isinstance(file, UploadFile):
             try:
                 file_suffix = file.suffix
+                file_ref = str(file.filename) if file.filename else "uploaded_file"
             except ValueError:
                 raise DocumentLoaderError(f"Could not determine file type for {file}")
         else:
             # Convert to Path if it's a string
-            file_path = Path(file)
-
-            # Detect file type
-            file_suffix = cls._detect_file_type(file_path)
-
-        # Map file types to loader classes
-        loaders = {
-            FileType.DOCX.value: DocxLoader,
-            FileType.DOC.value: DocxLoader,
-            FileType.PDF.value: PdfLoader,
-            FileType.PPTX.value: PptxLoader,
-            FileType.PPT.value: PptxLoader,
-            FileType.XLSX.value: ExcelLoader,
-            FileType.XLS.value: ExcelLoader,
-            FileType.JSON.value: JsonLoader,
-            FileType.MD.value: MarkdownLoader,
-            FileType.TXT.value: MarkdownLoader,  # Assuming TXT can be loaded like markdown
-            FileType.HTML.value: MarkdownLoader,  # Basic text extraction
-            FileType.CSS.value: MarkdownLoader,  # Basic text extraction
-            FileType.JS.value: MarkdownLoader,  # Basic text extraction
-        }
-
-        # Get the appropriate loader
-        loader_class = loaders.get(file_suffix)
+            file_path = Path(file) if not isinstance(file, Path) else file
+            file_ref = str(file)
+            
+            # If the file is a URL or a path that exists
+            if str(file).startswith(('http://', 'https://')) or file_path.exists():
+                # For URLs, we'll use the extension from the URL
+                if str(file).startswith(('http://', 'https://')):
+                    url_path = Path(str(file).split('?')[0])  # Remove query params
+                    file_suffix = url_path.suffix.lower() if url_path.suffix else None
+                    
+                    if not file_suffix or file_suffix not in cls._registry:
+                        # Try to get content type from HTTP headers
+                        import requests
+                        try:
+                            head_response = requests.head(str(file), allow_redirects=True)
+                            content_type = head_response.headers.get('Content-Type', '')
+                            file_suffix = cls._guess_file_type_from_mimetype(content_type)
+                        except Exception:
+                            # Default to markdown for unknown types
+                            file_suffix = FileType.MD.value
+                else:
+                    # Detect file type for local paths
+                    file_suffix = cls._detect_file_type(file_path)
+            else:
+                # Treat as raw text content
+                file_suffix = FileType.TXT.value
+        assert file_suffix in cls._registry, f"Unsupported file type: {file_suffix}"
+        # Get the appropriate loader class
+        loader_class = cls._registry.get(file_suffix)
 
         if loader_class is None:
-            raise DocumentLoaderError(f"Unsupported file type: {file_suffix}")
+            # Default to markdown for unknown types
+            loader_class = MarkdownLoader
 
-        # Create and use the loader
-        return loader_class(str(file)).extract()
+        # Create the loader
+        loader = loader_class(ref=file_ref)
+        
+        # Process content according to extract_text_only flag
+        if extract_text_only:
+            for chunk in loader.extract():
+                if chunk:
+                    # Clean HTML and extract only text
+                    clean_text = cls._extract_text_only(chunk)
+                    if clean_text:
+                        yield clean_text
+        else:
+            # Return raw content
+            yield from loader.extract()
+    @classmethod
+    def get_registry(cls):
+        return cls._registry
 
 
-# Maintain backwards compatibility
+# Convenience function that uses the new AnyDocs class
 def load_document(
-    file: tp.Union[str, Path, UploadFile],
+    file: tp.Union[str, Path, UploadFile], 
+    extract_text_only: bool = False
 ) -> tp.Generator[str, None, None]:
     """
-    Backwards-compatible function using the new DocumentLoader.
-
+    Load a document from a source (URL, file path, or content) and extract its content.
+    
     Args:
-        file: A file path or URL to load
-
+        file: The document source (URL, file path, or UploadFile object)
+        extract_text_only: If True, extracts only plain text without HTML formatting
+    
     Returns:
-        A generator yielding text chunks from the document
-
+        A generator yielding document content chunks
+        
     Raises:
-        DocumentLoaderError: If the file type is unsupported
+        DocumentLoaderError: If the document type is unsupported
     """
-    return AnyDocs.load(file)
+    return AnyDocs.load_document(file, extract_text_only)

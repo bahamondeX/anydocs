@@ -16,6 +16,25 @@ pymupdf = "^1.25.4"
 httpx = "^0.28.1"
 cachetools = "^5.5.2"
 markdown = "^3.7"
+chardet = "^5.2.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+black = "^23.7.0"
+isort = "^5.12.0"
+mypy = "^1.5.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
 
 
 [build-system]

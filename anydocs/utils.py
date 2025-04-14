@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import asyncio
-import base64c as base64  # type: ignore
 import json
 import logging
 import time
+from dataclasses import dataclass, field
 from functools import partial, reduce, wraps
 from typing import Awaitable, Callable, Coroutine, Type, TypeVar, Union, cast
 from uuid import uuid4
-from dataclasses import dataclass, field
 
+import base64c as base64  # type: ignore
 from cachetools import TTLCache, cached
 from typing_extensions import ParamSpec
 
@@ -303,10 +304,13 @@ def merge_dicts(*dicts: dict[str, T]) -> dict[str, T]:
     """
     return {k: v for d in dicts for k, v in d.items()}
 
+
 def _new_event_loop():
     loop = asyncio.get_event_loop()
     asyncio.set_event_loop(loop)
     return loop
+
+
 def get_loop():
     try:
         loop = asyncio.get_running_loop()
@@ -314,7 +318,7 @@ def get_loop():
             return loop
         else:
             loop.close()
-        return _new_event_loop()    
+        return _new_event_loop()
     except RuntimeError as e:
         logger.error("Event loop wasn't running %s", e)
         return _new_event_loop()
